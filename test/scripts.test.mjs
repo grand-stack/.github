@@ -63,6 +63,12 @@ test("headers: styles per file type, generated files are exempt", () => {
   assert.equal(isGenerated("src/index.ts"), false);
 });
 
+test("headers: a tracked file that was deleted from the working tree is ignored", () => {
+  const root = repo({ "a.ts": "export {};\n" });
+  execSync("rm a.ts", { cwd: root });
+  assert.deepEqual(missingHeaders(root), []);
+});
+
 test("headers: shebang and doctype stay first, files are fixed once, generated files are left alone", () => {
   const root = repo({
     "a.ts": "export const a = 1;\n",

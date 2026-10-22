@@ -55,7 +55,8 @@ export function missingHeaders(root) {
   return files.filter((file) => {
     if (isGenerated(file)) return false;
     const style = styleFor(file, hugoSite);
-    return style && !hasHeader(readFileSync(join(root, file), "utf8"));
+    // a file that is tracked but deleted in the working tree has nothing to check
+    return style && existsSync(join(root, file)) && !hasHeader(readFileSync(join(root, file), "utf8"));
   });
 }
 
