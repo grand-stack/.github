@@ -1,6 +1,6 @@
 # GRANDstack
 
-**GraphQL and Neo4j, for developers and agents.** A Neo4j graph, a GraphQL API generated from one schema file, a typed React app, and an MCP server so agents can use the same API. Small repositories you can clone and run in Docker. Website and docs: **https://grandstack.ai**.
+**GraphQL and Neo4j, for developers and agents.** A Neo4j graph, a GraphQL API generated from one schema file, a typed React app, and an MCP server so agents can use the same API. Small repositories you can clone and run in Docker. Website and docs: **https://www.grandstack.ai**.
 
 | Repository | What it is |
 | --- | --- |
@@ -12,6 +12,6 @@
 | [grandstack-federation](https://github.com/grand-stack/grandstack-federation) | Federation: the server as a subgraph, a Wikipedia subgraph, a gateway |
 | [grand-stack.github.io](https://github.com/grand-stack/grand-stack.github.io) | The website, grandstack.ai |
 
-Start with the [quickstart](https://grandstack.ai/quickstart/). Working with a coding agent? Point it at [grandstack.ai/llms.txt](https://grandstack.ai/llms.txt).
+Start with the [quickstart](https://www.grandstack.ai/quickstart/). Working with a coding agent? Point it at [www.grandstack.ai/llms.txt](https://www.grandstack.ai/llms.txt).
 
 Everything here is open source under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).

@@ -17,7 +17,7 @@ Called as `grand-stack/.github/.github/workflows/<name>.yml@v1`. The `v1` tag mo
 | `cut-release.yml` | The release button: next version from the latest tag, sets every `package.json`, commits, tags, pushes |
 | `dependency-review.yml` | Dependency review on pull requests (code scanning uses GitHub's CodeQL default setup, which is on for the organisation's repositories) |
 
-How releases work end to end, and the one-time setup (secrets, settings), is in [the releasing guide](https://grandstack.ai/docs/grandstack/releasing/).
+How releases work end to end, and the one-time setup (secrets, settings), is in [the releasing guide](https://www.grandstack.ai/docs/grandstack/releasing/).
 
 ## Scripts
 
