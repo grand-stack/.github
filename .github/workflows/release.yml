@@ -82,7 +82,7 @@ jobs:
           sha="$(git rev-parse HEAD)"
           # the runs API can lag behind a run that has just finished, so look a few times before giving up
           result=0
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             result="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
             [ "$result" != "0" ] && break
             sleep 15
