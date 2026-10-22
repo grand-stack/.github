@@ -15,7 +15,7 @@ Called as `grand-stack/.github/.github/workflows/<name>.yml@v1`. The `v1` tag mo
 | `ci-node.yml` | `npm ci`, the npm scripts you name, extra commands, the copyright-header check, and on a tag the tag-versus-`package.json` check |
 | `release.yml` | Validates a `vX.Y.Z` tag, requires green CI on the commit, creates the GitHub Release, builds and pushes multi-arch images to GHCR with semver tags, and tells the website and the integration test |
 | `cut-release.yml` | The release button: next version from the latest tag, sets every `package.json`, commits, tags, pushes |
-| `codeql.yml`, `dependency-review.yml` | Code scanning (JavaScript and TypeScript) and dependency review on pull requests |
+| `dependency-review.yml` | Dependency review on pull requests (code scanning uses GitHub's CodeQL default setup, which is on for the organisation's repositories) |
 
 How releases work end to end, and the one-time setup (secrets, settings), is in [the releasing guide](https://grandstack.ai/docs/grandstack/releasing/).
 
