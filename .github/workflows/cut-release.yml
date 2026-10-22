@@ -57,7 +57,10 @@ jobs:
             [ "$ok" != "0" ] && break
             sleep 15
           done
-          if [ "$ok" = "0" ]; then echo "::error::No successful ci.yml run for main at $sha. Fix or re-run CI first."; exit 1; fi
+          if [ "$ok" = "0" ]; then
+            echo "Runs the API returned for $sha:"; gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json status,conclusion,event,headSha || true
+            echo "::error::No successful ci.yml run for main at $sha. Fix or re-run CI first."; exit 1
+          fi
       - name: Next version
         id: next
         env:
