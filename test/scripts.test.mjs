@@ -60,6 +60,7 @@ test("headers: styles per file type, generated files are exempt", () => {
   assert.equal(isGenerated("src/graphql/generated/graphql.ts"), true);
   assert.equal(isGenerated("gateway/supergraph.graphql"), true);
   assert.equal(isGenerated("content/docs/x/y.md"), true);
+  assert.equal(isGenerated("assets/js/vendor/mixpanel.min.js"), true);
   assert.equal(isGenerated("src/index.ts"), false);
 });
 

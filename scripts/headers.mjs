@@ -4,7 +4,7 @@
 // The copyright header every code file in the GRANDstack repositories carries (two lines, in the file's comment syntax).
 //   node headers.mjs --root <repo> [--check]    add the header where it is missing, or (--check) list files without it, exit 1 if any
 // Code files are the ones in the table below. Not covered: Markdown, JSON, SVG, lock files, patches, plain-text data, and generated
-// files (codegen output, the composed supergraph, the synced docs copy of the website).
+// files (codegen output, the composed supergraph, the synced docs copy of the website) and vendored third-party code (vendor/ folders).
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
@@ -20,7 +20,7 @@ const hugo = (t) => `{{- /*\n${t.map((l) => `  ${l}`).join("\n")}\n*/ -}}`;
 const htmlc = (t) => `<!--\n${t.map((l) => `  ${l}`).join("\n")}\n-->`;
 
 const byExt = { ".ts": slash, ".tsx": slash, ".mts": slash, ".cts": slash, ".js": slash, ".mjs": slash, ".cjs": slash, ".cypher": slash, ".graphql": hash, ".yaml": hash, ".yml": hash, ".sh": hash, ".conf": hash, ".toml": hash, ".css": block };
-const generated = [/(^|\/)generated\//, /(^|\/)supergraph\.graphql$/, /^content\/docs\//, /^static\//, /^public\//, /^resources\//, /(^|\/)node_modules\//, /(^|\/)\.shared-ci\//];
+const generated = [/(^|\/)generated\//, /(^|\/)vendor\//, /(^|\/)supergraph\.graphql$/, /^content\/docs\//, /^static\//, /^public\//, /^resources\//, /(^|\/)node_modules\//, /(^|\/)\.shared-ci\//];
 
 export function isGenerated(file) {
   return generated.some((re) => re.test(file));
