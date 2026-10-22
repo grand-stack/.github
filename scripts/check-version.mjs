@@ -12,7 +12,7 @@ export const TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 
 /** Directories (relative to root) that hold a tracked package.json. */
 export function packageDirs(root) {
-  return execSync("git ls-files '*package.json'", { cwd: root, encoding: "utf8" })
+  return execSync("git ls-files ':(glob)**/package.json'", { cwd: root, encoding: "utf8" })
     .split("\n").filter((f) => f && !f.includes("node_modules/")).map((f) => dirname(f));
 }
 

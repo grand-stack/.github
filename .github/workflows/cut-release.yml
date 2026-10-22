@@ -39,6 +39,8 @@ jobs:
           repository: ${{ github.repository_owner }}/.github
           ref: v1
           path: .shared-ci
+      - name: Keep the shared scripts out of the workspace
+        run: mv .shared-ci "$RUNNER_TEMP/shared-ci"
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
       - name: CI is green on main
@@ -46,6 +48,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha="$(git rev-parse HEAD)"
+          # a release commit is pushed with the default token, so CI never ran on it: judge the commit before it
+          if git log -1 --format=%s | grep -qE '^release v[0-9]+\.[0-9]+\.[0-9]+$'; then sha="$(git rev-parse HEAD~1)"; fi
           ok="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
           if [ "$ok" = "0" ]; then echo "::error::No successful ci.yml run for main at $sha. Fix or re-run CI first."; exit 1; fi
       - name: Next version
@@ -53,7 +57,7 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
         run: |
-          version="$(node .shared-ci/scripts/next-version.mjs --bump "$BUMP")"
+          version="$(node "$RUNNER_TEMP/shared-ci/scripts/next-version.mjs" --bump "$BUMP")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           echo "Next version: v$version"
@@ -61,7 +65,7 @@ jobs:
         env:
           VERSION: ${{ steps.next.outputs.version }}
         run: |
-          for dir in $(node .shared-ci/scripts/package-dirs.mjs --root .); do
+          for dir in $(node "$RUNNER_TEMP/shared-ci/scripts/package-dirs.mjs" --root .); do
             (cd "$dir" && npm version "$VERSION" --no-git-tag-version --allow-same-version)
           done
       - name: Commit, tag and push
@@ -71,7 +75,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- ':!.shared-ci'
+          git add -A
           if git diff --cached --quiet; then echo "package.json already at this version; tagging only"; else git commit -m "release $TAG"; fi
           if [ "$DRY_RUN" = "true" ]; then
             echo "dry run: would tag $TAG and push main and the tag"; git --no-pager log --oneline -3; git --no-pager diff HEAD~1 --stat || true; exit 0

@@ -42,6 +42,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      is-latest: ${{ steps.latest.outputs.is-latest }}
     steps:
       - uses: actions/checkout@v4
         with: { ref: "${{ inputs.tag }}", fetch-depth: 0 }
@@ -50,8 +52,28 @@ jobs:
           repository: ${{ github.repository_owner }}/.github
           ref: v1
           path: .shared-ci
+      - name: Keep the shared scripts out of the workspace
+        run: mv .shared-ci "$RUNNER_TEMP/shared-ci"
       - name: Tag and package versions agree
-        run: node .shared-ci/scripts/check-version.mjs --tag "${{ inputs.tag }}" --root .
+        env:
+          TAG: ${{ inputs.tag }}
+        run: node "$RUNNER_TEMP/shared-ci/scripts/check-version.mjs" --tag "$TAG" --root .
+      - name: The tag is on main
+        env:
+          TAG: ${{ inputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git fetch --quiet origin "$DEFAULT_BRANCH"
+          if ! git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH"; then
+            echo "::error::$TAG is not on $DEFAULT_BRANCH. Releases are made from the default branch."; exit 1
+          fi
+      - name: Is this the highest release?
+        id: latest
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          top="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          if [ "$top" = "$TAG" ]; then echo "is-latest=true" >> "$GITHUB_OUTPUT"; else echo "is-latest=false" >> "$GITHUB_OUTPUT"; echo "::notice::$TAG is not the highest release ($top), so the images will not be tagged latest."; fi
       - name: CI passed for this commit
         if: ${{ !inputs.skip-ci-gate }}
         env:
@@ -71,8 +93,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with: { ref: "${{ inputs.tag }}" }
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,8 +100,8 @@ jobs:
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
           if [ "$DRY_RUN" = "true" ]; then echo "dry run: would create the release $TAG with generated notes"; exit 0; fi
-          if gh release view "$TAG" >/dev/null 2>&1; then echo "Release $TAG already exists"; exit 0; fi
-          gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "Release $TAG already exists"; exit 0; fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes --verify-tag
 
   images:
     needs: validate
@@ -114,7 +134,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}},value=${{ inputs.tag }}
             type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ needs.validate.outputs.is-latest == 'true' }}
           labels: |
             org.opencontainers.image.licenses=Apache-2.0
             org.opencontainers.image.version=${{ inputs.tag }}
@@ -127,6 +147,7 @@ jobs:
           platforms: ${{ inputs.dry-run && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
           cache-from: type=gha,scope=${{ matrix.image.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
 

@@ -1,7 +1,8 @@
 # Copyright (c) "Neo4j"
 # Neo4j Sweden AB [http://neo4j.com]
 #
-# Fails a pull request that adds a dependency with a known high-severity vulnerability or a licence we cannot ship under Apache-2.0.
+# Fails a pull request that adds a dependency with a known high-severity vulnerability. Needs the dependency graph enabled in the repository settings.
+# (Licences are not checked yet.)
 name: dependency-review
 on:
   workflow_call:

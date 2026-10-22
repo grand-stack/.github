@@ -6,8 +6,8 @@
 #     ci:
 #       uses: grand-stack/.github/.github/workflows/ci-node.yml@v1
 #       with: { scripts: "typecheck test build docs:check" }
-# It installs dependencies, runs the named npm scripts and any extra commands, checks the copyright headers, and on a tag
-# checks that the tag and the package.json versions agree.
+# It installs dependencies, runs the named npm scripts and any extra commands, and checks the copyright headers.
+# (The release workflow, not this one, checks that a tag and the package.json versions agree.)
 name: ci-node
 on:
   workflow_call:
@@ -49,6 +49,8 @@ jobs:
           repository: ${{ github.repository_owner }}/.github
           ref: v1
           path: .shared-ci
+      - name: Keep the shared scripts out of the workspace
+        run: mv .shared-ci "$RUNNER_TEMP/shared-ci"
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
@@ -78,7 +80,4 @@ jobs:
         run: bash -e -c "$COMMANDS"
       - name: Copyright headers
         if: ${{ inputs.check-headers }}
-        run: node .shared-ci/scripts/headers.mjs --root . --check
-      - name: Tag and package versions agree
-        if: ${{ github.ref_type == 'tag' }}
-        run: node .shared-ci/scripts/check-version.mjs --tag "$GITHUB_REF_NAME" --root .
+        run: node "$RUNNER_TEMP/shared-ci/scripts/headers.mjs" --root . --check
