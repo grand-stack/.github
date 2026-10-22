@@ -1,0 +1,84 @@
+# Copyright (c) "Neo4j"
+# Neo4j Sweden AB [http://neo4j.com]
+#
+# Shared CI for the GRANDstack repositories. Call it like this:
+#   jobs:
+#     ci:
+#       uses: grand-stack/.github/.github/workflows/ci-node.yml@v1
+#       with: { scripts: "typecheck test build docs:check" }
+# It installs dependencies, runs the named npm scripts and any extra commands, checks the copyright headers, and on a tag
+# checks that the tag and the package.json versions agree.
+name: ci-node
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Folder with the package.json (for repositories with several packages)
+        type: string
+        default: "."
+      install:
+        description: Run npm ci first (false for a repository without a package.json)
+        type: boolean
+        default: true
+      scripts:
+        description: npm scripts to run, separated by spaces, in order
+        type: string
+        default: "typecheck test build docs:check"
+      commands:
+        description: Extra shell commands to run after the scripts (one per line)
+        type: string
+        default: ""
+      node-version:
+        type: string
+        default: "24"
+      check-headers:
+        description: Check the copyright headers of the whole repository
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Shared scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          ref: v1
+          path: .shared-ci
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.install && 'npm' || '' }}
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+      - name: Install
+        if: ${{ inputs.install }}
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+      - name: npm scripts
+        if: ${{ inputs.scripts != '' }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          SCRIPTS: ${{ inputs.scripts }}
+        run: |
+          set -e
+          for script in $SCRIPTS; do
+            echo "::group::npm run $script"
+            npm run "$script"
+            echo "::endgroup::"
+          done
+      - name: Extra commands
+        if: ${{ inputs.commands != '' }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMANDS: ${{ inputs.commands }}
+        run: bash -e -c "$COMMANDS"
+      - name: Copyright headers
+        if: ${{ inputs.check-headers }}
+        run: node .shared-ci/scripts/headers.mjs --root . --check
+      - name: Tag and package versions agree
+        if: ${{ github.ref_type == 'tag' }}
+        run: node .shared-ci/scripts/check-version.mjs --tag "$GITHUB_REF_NAME" --root .

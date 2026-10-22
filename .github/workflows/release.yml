@@ -1,0 +1,157 @@
+# Copyright (c) "Neo4j"
+# Neo4j Sweden AB [http://neo4j.com]
+#
+# Shared release workflow: validates the tag, makes the GitHub Release, publishes the container images, and tells the website
+# (and the integration test) to run again. Call it from a repository's release workflow:
+#   jobs:
+#     release:
+#       uses: grand-stack/.github/.github/workflows/release.yml@v1
+#       with:
+#         tag: ${{ github.ref_name }}
+#         images: '[{"name":"grandstack-server","context":".","file":"Dockerfile"}]'
+#       secrets: inherit
+name: release
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The release tag, vMAJOR.MINOR.PATCH
+        type: string
+        required: true
+      images:
+        description: 'JSON list of images to publish: [{"name":"...","context":".","file":"Dockerfile"}]'
+        type: string
+        default: "[]"
+      skip-ci-gate:
+        description: Do not require a successful CI run on the tagged commit (used by the release button, which checks the commit before it)
+        type: boolean
+        default: false
+      dry-run:
+        description: Validate and build, but publish nothing
+        type: boolean
+        default: false
+    secrets:
+      SITE_DISPATCH_TOKEN:
+        description: Token that may send repository_dispatch events to the website and umbrella repositories
+        required: false
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.tag }}", fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          ref: v1
+          path: .shared-ci
+      - name: Tag and package versions agree
+        run: node .shared-ci/scripts/check-version.mjs --tag "${{ inputs.tag }}" --root .
+      - name: CI passed for this commit
+        if: ${{ !inputs.skip-ci-gate }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          result="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
+          if [ "$result" = "0" ]; then
+            echo "::error::No successful ci.yml run for commit $sha. Wait for CI on this commit, or re-run it, then release again."
+            exit 1
+          fi
+          echo "CI succeeded for $sha"
+
+  github-release:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.tag }}" }
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then echo "dry run: would create the release $TAG with generated notes"; exit 0; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "Release $TAG already exists"; exit 0; fi
+          gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag
+
+  images:
+    needs: validate
+    if: ${{ inputs.images != '[]' && inputs.images != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(inputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.tag }}" }
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        if: ${{ !inputs.dry-run }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Image names and tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ inputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.version=${{ inputs.tag }}
+      - name: Build${{ inputs.dry-run && ' (dry run, not pushed)' || ' and push' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          push: ${{ !inputs.dry-run }}
+          platforms: ${{ inputs.dry-run && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+
+  notify:
+    needs: [github-release, images]
+    # run when the images job was skipped (no images), but not when something failed
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tell the website and the integration test
+        env:
+          TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then echo "dry run: would send repo-released for $REPO $TAG to the website and umbrella repositories"; exit 0; fi
+          if [ -z "$TOKEN" ]; then
+            echo "::notice::SITE_DISPATCH_TOKEN is not set, so the website was not told. It will pick up this release at its next hourly check."
+            exit 0
+          fi
+          for target in grand-stack.github.io grandstack; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "https://api.github.com/repos/$OWNER/$target/dispatches" \
+              -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+              -d "{\"event_type\":\"repo-released\",\"client_payload\":{\"repo\":\"$REPO\",\"tag\":\"$TAG\"}}")"
+            if [ "$code" = "204" ]; then echo "Told $target"; else echo "::warning::Could not dispatch to $target (HTTP $code). The website's hourly check will catch up."; fi
+          done

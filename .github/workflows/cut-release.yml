@@ -1,0 +1,81 @@
+# Copyright (c) "Neo4j"
+# Neo4j Sweden AB [http://neo4j.com]
+#
+# The release button, shared. A repository's release-cut workflow calls this with the kind of release (patch, minor, major).
+# It checks that CI is green on main, works out the next version from the latest tag, sets it in every package.json,
+# commits "release vX.Y.Z" to main, tags it and pushes. It returns the tag, so the caller can run the release workflow next
+# (a tag pushed with the default token does not start other workflows, so the caller chains them).
+name: cut-release
+on:
+  workflow_call:
+    inputs:
+      bump:
+        description: patch, minor or major
+        type: string
+        required: true
+      dry-run:
+        description: Show what would happen, push nothing
+        type: boolean
+        default: false
+    outputs:
+      tag:
+        description: The new tag (vX.Y.Z)
+        value: ${{ jobs.cut.outputs.tag }}
+permissions:
+  contents: read
+jobs:
+  cut:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          ref: v1
+          path: .shared-ci
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: CI is green on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          ok="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
+          if [ "$ok" = "0" ]; then echo "::error::No successful ci.yml run for main at $sha. Fix or re-run CI first."; exit 1; fi
+      - name: Next version
+        id: next
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          version="$(node .shared-ci/scripts/next-version.mjs --bump "$BUMP")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Next version: v$version"
+      - name: Set the version in every package.json
+        env:
+          VERSION: ${{ steps.next.outputs.version }}
+        run: |
+          for dir in $(node .shared-ci/scripts/package-dirs.mjs --root .); do
+            (cd "$dir" && npm version "$VERSION" --no-git-tag-version --allow-same-version)
+          done
+      - name: Commit, tag and push
+        env:
+          TAG: ${{ steps.next.outputs.tag }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- ':!.shared-ci'
+          if git diff --cached --quiet; then echo "package.json already at this version; tagging only"; else git commit -m "release $TAG"; fi
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry run: would tag $TAG and push main and the tag"; git --no-pager log --oneline -3; git --no-pager diff HEAD~1 --stat || true; exit 0
+          fi
+          git tag "$TAG"
+          git push origin HEAD:main
+          git push origin "$TAG"

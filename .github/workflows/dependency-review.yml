@@ -1,0 +1,21 @@
+# Copyright (c) "Neo4j"
+# Neo4j Sweden AB [http://neo4j.com]
+#
+# Fails a pull request that adds a dependency with a known high-severity vulnerability or a licence we cannot ship under Apache-2.0.
+name: dependency-review
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure

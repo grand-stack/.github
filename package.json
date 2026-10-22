@@ -1,0 +1,12 @@
+{
+  "name": "grandstack-org-github",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "GRANDstack organisation defaults, shared GitHub Actions workflows and the scripts they use",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/",
+    "headers": "node scripts/headers.mjs --root . --check"
+  }
+}
