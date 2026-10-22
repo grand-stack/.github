@@ -50,7 +50,13 @@ jobs:
           sha="$(git rev-parse HEAD)"
           # a release commit is pushed with the default token, so CI never ran on it: judge the commit before it
           if git log -1 --format=%s | grep -qE '^release v[0-9]+\.[0-9]+\.[0-9]+$'; then sha="$(git rev-parse HEAD~1)"; fi
-          ok="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
+          # the runs API can lag behind a run that has just finished, so look a few times before giving up
+          ok=0
+          for attempt in 1 2 3 4 5; do
+            ok="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
+            [ "$ok" != "0" ] && break
+            sleep 15
+          done
           if [ "$ok" = "0" ]; then echo "::error::No successful ci.yml run for main at $sha. Fix or re-run CI first."; exit 1; fi
       - name: Next version
         id: next

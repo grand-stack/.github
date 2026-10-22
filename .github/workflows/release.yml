@@ -80,7 +80,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha="$(git rev-parse HEAD)"
-          result="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
+          # the runs API can lag behind a run that has just finished, so look a few times before giving up
+          result=0
+          for attempt in 1 2 3 4 5; do
+            result="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow ci.yml --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
+            [ "$result" != "0" ] && break
+            sleep 15
+          done
           if [ "$result" = "0" ]; then
             echo "::error::No successful ci.yml run for commit $sha. Wait for CI on this commit, or re-run it, then release again."
             exit 1
